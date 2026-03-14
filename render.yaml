@@ -8,13 +8,17 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "10000"
       - key: EASYECOM_API_BASE
-        sync: false
+        value: https://api.easyecom.io
       - key: EASYECOM_EMAIL
-        sync: false
+        value: sandeep@anveshan.farm
       - key: EASYECOM_PASSWORD
-        sync: false
+        value: Sandeep@2408
       - key: EASYECOM_API_KEY
-        sync: false
+        value: a172d3c50134d48f7c044f40762e32edb9da8e00
       - key: EASYECOM_LOCATION_KEY
-        sync: false
+        value: ne6813016681
+      - key: AUTO_SYNC_INTERVAL
+        value: "15"
