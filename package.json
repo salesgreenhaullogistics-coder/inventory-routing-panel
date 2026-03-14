@@ -1,0 +1,21 @@
+{
+  "name": "inventory-routing-panel",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node index.js",
+    "client": "cd client && npm run dev",
+    "setup": "npm install && cd server && npm install && cd ../client && npm install",
+    "seed": "cd server && node db/seed-pincodes.js",
+    "db:init": "cd server && node db/init.js",
+    "start": "cd server && node index.js",
+    "build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
