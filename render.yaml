@@ -4,9 +4,17 @@ services:
     runtime: node
     plan: free
     buildCommand: cd server && npm install && cd ../client && npm install && npm run build
-    startCommand: cd server && node index.js
+    startCommand: node server/index.js
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3001
+      - key: EASYECOM_API_BASE
+        sync: false
+      - key: EASYECOM_EMAIL
+        sync: false
+      - key: EASYECOM_PASSWORD
+        sync: false
+      - key: EASYECOM_API_KEY
+        sync: false
+      - key: EASYECOM_LOCATION_KEY
+        sync: false
