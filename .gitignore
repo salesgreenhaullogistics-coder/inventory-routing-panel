@@ -5,3 +5,6 @@ server/db/*.db-wal
 server/db/*.db-shm
 .DS_Store
 dist.zip
+
+.netlify/
+deploy-pkg/

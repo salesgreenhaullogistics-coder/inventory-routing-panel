@@ -2,7 +2,11 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, 'inventory.db');
+// Use /tmp on Netlify (serverless), local path otherwise
+const IS_NETLIFY = !!process.env.NETLIFY;
+const DB_PATH = IS_NETLIFY
+  ? path.join('/tmp', 'inventory.db')
+  : path.join(__dirname, 'inventory.db');
 
 let db;
 
