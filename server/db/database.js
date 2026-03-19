@@ -2,9 +2,9 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Use /tmp on Netlify (serverless), local path otherwise
-const IS_NETLIFY = !!process.env.NETLIFY;
-const DB_PATH = IS_NETLIFY
+// Use /tmp on serverless (Netlify/Vercel), local path otherwise
+const IS_SERVERLESS = !!process.env.NETLIFY || !!process.env.VERCEL;
+const DB_PATH = IS_SERVERLESS
   ? path.join('/tmp', 'inventory.db')
   : path.join(__dirname, 'inventory.db');
 
@@ -98,6 +98,16 @@ function migrateSchema() {
     if (!rrCols.includes(col.name)) {
       db.exec(`ALTER TABLE routing_results ADD COLUMN ${col.name} ${col.def}`);
     }
+  }
+
+  // Add rto_score to routing_results if missing
+  if (!rrCols.includes('rto_score')) {
+    db.exec('ALTER TABLE routing_results ADD COLUMN rto_score REAL DEFAULT 0');
+  }
+
+  // Add manually_overridden flag to routing_results if missing
+  if (!rrCols.includes('manually_overridden')) {
+    db.exec('ALTER TABLE routing_results ADD COLUMN manually_overridden INTEGER DEFAULT 0');
   }
 }
 

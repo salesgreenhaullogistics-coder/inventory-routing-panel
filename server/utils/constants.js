@@ -11,13 +11,14 @@ const ROUTING_CONFIG = {
   HEAVY_ORDER_THRESHOLD_KG: 20,
 };
 
-// Multi-factor scoring weights
+// Multi-factor scoring weights (6 factors with RTO)
 const SCORING_WEIGHTS = {
-  DISTANCE: 0.40,
-  INVENTORY: 0.30,
+  DISTANCE: 0.35,
+  INVENTORY: 0.25,
   LOAD: 0.15,
   SPEED: 0.10,
   COST: 0.05,
+  RTO: 0.10,
 };
 
 // Inventory health thresholds

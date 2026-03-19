@@ -29,13 +29,26 @@ function getInventoryHealthSummary() {
     WHERE status = 'Available' AND shelf_life_pct >= ${INVENTORY_HEALTH.HEALTHY_MIN} AND warehouse_id IS NOT NULL
   `).get();
 
-  // Warning and critical are tracked separately in bad inventory
+  // Warning: Available + shelf_life 30-60%
+  const warning = db.prepare(`
+    SELECT COALESCE(SUM(quantity), 0) as warning_units, COUNT(DISTINCT sku) as warning_skus
+    FROM inventory
+    WHERE status = 'Available' AND shelf_life_pct >= ${INVENTORY_HEALTH.WARNING_MIN} AND shelf_life_pct < ${INVENTORY_HEALTH.HEALTHY_MIN} AND warehouse_id IS NOT NULL
+  `).get();
+
+  // Critical: Available + shelf_life < 30%
+  const critical = db.prepare(`
+    SELECT COALESCE(SUM(quantity), 0) as critical_units, COUNT(DISTINCT sku) as critical_skus
+    FROM inventory
+    WHERE status = 'Available' AND shelf_life_pct < ${INVENTORY_HEALTH.CRITICAL_MAX} AND warehouse_id IS NOT NULL
+  `).get();
+
   return {
     ...health,
-    warning_units: 0,
-    warning_skus: 0,
-    critical_units: 0,
-    critical_skus: 0,
+    warning_units: warning.warning_units || 0,
+    warning_skus: warning.warning_skus || 0,
+    critical_units: critical.critical_units || 0,
+    critical_skus: critical.critical_skus || 0,
   };
 }
 

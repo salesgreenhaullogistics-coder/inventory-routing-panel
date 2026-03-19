@@ -37,6 +37,10 @@ export const getInventorySummary = () => api.get('/inventory/summary')
 // Routing
 export const getRoutingResults = (params) => api.get('/routing/results', { params })
 export const getSplitOrders = (params) => api.get('/routing/splits', { params })
+export const getRoutingAttempts = (orderId) => api.get(`/routing/attempts/${orderId}`)
+export const getSplitOrderDetail = (orderId) => api.get(`/routing/split-detail/${orderId}`)
+export const overrideRouting = (data) => api.post('/routing/override', data)
+export const getOptimalSplit = (orderId) => api.get(`/routing/optimal-split/${orderId}`)
 
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats')
@@ -51,6 +55,11 @@ export const getWarehouseAlerts = () => api.get('/dashboard/warehouse-alerts')
 export const getScoringBreakdown = () => api.get('/dashboard/scoring-breakdown')
 export const getOrdersByStatus = (params) => api.get('/dashboard/orders-by-status', { params })
 export const getBadInventory = () => api.get('/dashboard/bad-inventory')
+export const getAttemptStats = () => api.get('/dashboard/attempt-stats')
+export const getAIInsights = () => api.get('/dashboard/ai-insights')
+export const getMisrouteRate = () => api.get('/dashboard/misroute-rate')
+export const getMisrouteDrilldown = (params) => api.get('/dashboard/misroute-drilldown', { params })
+export const getUnfulfillableAlerts = () => api.get('/dashboard/unfulfillable-alerts')
 
 // Pincodes
 export const validatePincode = (pincode) => api.get(`/pincodes/validate/${pincode}`)

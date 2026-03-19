@@ -31,6 +31,7 @@ function splitOrder(requiredQty, sortedWarehouses) {
       loadScore: wh.loadScore || 0,
       speedScore: wh.speedScore || 0,
       costScore: wh.costScore || 0,
+      rtoScore: wh.rtoScore || 0,
     });
 
     remaining -= allocate;

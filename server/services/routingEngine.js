@@ -8,6 +8,22 @@ const { sendSplitOrderAlert } = require('./emailService');
 const { scoreWarehouses, incrementWarehouseLoad } = require('./scoringEngine');
 const { FAILURE_REASONS } = require('../utils/constants');
 
+/**
+ * Insert a routing attempt record for decision trail visibility.
+ */
+function insertAttempt(db, stmt, data) {
+  stmt.run(
+    data.orderId, data.orderItemId, data.warehouseId, data.attemptOrder,
+    data.status, data.rejectionReason || null,
+    data.availableQty || 0, data.requiredQty,
+    data.allocatedQty || 0, data.distanceKm || 0,
+    data.routingScore || 0, data.distanceScore || 0,
+    data.inventoryScore || 0, data.loadScore || 0,
+    data.speedScore || 0, data.costScore || 0,
+    data.rtoScore || 0
+  );
+}
+
 async function routeOrder(orderId) {
   const db = getDb();
 
@@ -16,6 +32,19 @@ async function routeOrder(orderId) {
 
   const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
   if (items.length === 0) throw new Error(`No items found for order ${orderId}`);
+
+  // Clear previous routing results and attempts for re-routing
+  db.prepare('DELETE FROM routing_results WHERE order_id = ?').run(orderId);
+  db.prepare('DELETE FROM routing_attempts WHERE order_id = ?').run(orderId);
+
+  // Prepare attempt insert statement
+  const attemptStmt = db.prepare(`
+    INSERT INTO routing_attempts (
+      order_id, order_item_id, warehouse_id, attempt_order, status, rejection_reason,
+      available_qty, required_qty, allocated_qty, distance_km,
+      routing_score, distance_score, inventory_score, load_score, speed_score, cost_score, rto_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
   // Step 1: Validate pincode
   const pincodeResult = validatePincode(order.shipping_pincode, orderId);
@@ -48,6 +77,10 @@ async function routeOrder(orderId) {
   const whMetaMap = {};
   for (const wh of warehouseMeta) { whMetaMap[wh.id] = wh; }
 
+  // Get RTO rate for shipping pincode
+  const rtoData = db.prepare('SELECT rto_rate FROM rto_history WHERE pincode = ?').get(order.shipping_pincode);
+  const rtoRate = rtoData?.rto_rate || 0.05; // default 5%
+
   let orderHasSplit = false;
   let allSuccess = true;
   const results = [];
@@ -73,21 +106,33 @@ async function routeOrder(orderId) {
           maxCapacity: meta.max_capacity || 1000,
           avgDeliveryDays: meta.avg_delivery_days || 3,
           baseShippingCost: meta.base_shipping_cost || 50,
+          rtoRate: rtoRate,
         });
       } else {
         failureReasons.push({
           warehouseId: wh.warehouseId,
+          warehouseName: wh.warehouseName,
           reason: inv.reason,
           distanceKm: wh.distanceKm,
+          availableQty: 0,
         });
       }
     }
 
     if (warehouseCandidates.length === 0) {
-      // Determine failure reason
+      // Record attempts for all rejected warehouses
+      let attemptOrder = 1;
+      for (const fr of failureReasons) {
+        insertAttempt(db, attemptStmt, {
+          orderId, orderItemId: item.id, warehouseId: fr.warehouseId,
+          attemptOrder: attemptOrder++, status: 'rejected',
+          rejectionReason: fr.reason, availableQty: 0,
+          requiredQty: item.quantity, distanceKm: fr.distanceKm,
+        });
+      }
+
       let primaryReason = FAILURE_REASONS.NO_INVENTORY;
       if (failureReasons.length > 0) {
-        // Check if all reasons are SKU_NOT_FOUND -> that's SKU Missing
         const allSkuMissing = failureReasons.every(f => f.reason === FAILURE_REASONS.SKU_NOT_FOUND);
         if (allSkuMissing) {
           primaryReason = FAILURE_REASONS.SKU_MISSING;
@@ -111,19 +156,70 @@ async function routeOrder(orderId) {
     // Step 5: Split/allocate using scored order (best score first)
     const splitResult = splitOrder(item.quantity, scoredWarehouses);
 
+    // Build a map of allocated warehouses for attempt tracking
+    const allocMap = {};
+    for (const alloc of splitResult.allocations) {
+      allocMap[alloc.warehouseId] = alloc;
+    }
+
+    // Record attempts for ALL warehouses (both rejected and scored)
+    let attemptOrder = 1;
+
+    // First: rejected warehouses (no inventory)
+    for (const fr of failureReasons) {
+      insertAttempt(db, attemptStmt, {
+        orderId, orderItemId: item.id, warehouseId: fr.warehouseId,
+        attemptOrder: attemptOrder++, status: 'rejected',
+        rejectionReason: fr.reason, availableQty: 0,
+        requiredQty: item.quantity, distanceKm: fr.distanceKm,
+      });
+    }
+
+    // Then: scored warehouses (selected, partial, or outscored)
+    for (const sw of scoredWarehouses) {
+      const alloc = allocMap[sw.warehouseId];
+      let status = 'rejected';
+      let rejectionReason = 'Outscored';
+      let allocatedQty = 0;
+
+      if (alloc) {
+        allocatedQty = alloc.allocatedQty;
+        if (allocatedQty >= item.quantity) {
+          status = 'selected';
+          rejectionReason = null;
+        } else if (allocatedQty > 0) {
+          status = 'partial';
+          rejectionReason = null;
+        }
+      }
+
+      insertAttempt(db, attemptStmt, {
+        orderId, orderItemId: item.id, warehouseId: sw.warehouseId,
+        attemptOrder: attemptOrder++, status, rejectionReason,
+        availableQty: sw.availableQty, requiredQty: item.quantity,
+        allocatedQty, distanceKm: sw.distanceKm,
+        routingScore: sw.routingScore, distanceScore: sw.distanceScore,
+        inventoryScore: sw.inventoryScore, loadScore: sw.loadScore,
+        speedScore: sw.speedScore, costScore: sw.costScore,
+        rtoScore: sw.rtoScore || 0,
+      });
+    }
+
+    // Insert routing results (final assignments)
     for (const alloc of splitResult.allocations) {
       db.prepare(`
         INSERT INTO routing_results (
           order_id, order_item_id, assigned_warehouse_id, assigned_quantity,
           warehouse_rank, distance_km, routing_score,
-          distance_score, inventory_score, load_score, speed_score, cost_score,
+          distance_score, inventory_score, load_score, speed_score, cost_score, rto_score,
           is_split
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId, item.id, alloc.warehouseId, alloc.allocatedQty,
         alloc.rank, alloc.distanceKm, alloc.routingScore || 0,
         alloc.distanceScore || 0, alloc.inventoryScore || 0,
         alloc.loadScore || 0, alloc.speedScore || 0, alloc.costScore || 0,
+        alloc.rtoScore || 0,
         splitResult.isSplit ? 1 : 0
       );
 

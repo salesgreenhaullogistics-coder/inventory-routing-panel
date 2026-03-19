@@ -6,14 +6,13 @@ import {
 import StatCard from '../common/StatCard'
 import FilterBar from '../common/FilterBar'
 import Pagination from '../common/Pagination'
-import RoutingDistributionChart from './RoutingDistributionChart'
 import FailureReasonsChart from './FailureReasonsChart'
-import WarehouseUtilizationChart from './WarehouseUtilizationChart'
-import ShelfLifeAnalytics from './ShelfLifeAnalytics'
-import OrderSplitStats from './OrderSplitStats'
 import DailyTrendsChart from './DailyTrendsChart'
 import InventoryHealthPanel from './InventoryHealthPanel'
 import ScoringBreakdownChart from './ScoringBreakdownChart'
+import UnfulfillableAlerts from './UnfulfillableAlerts'
+import AIInsightsPanel from './AIInsightsPanel'
+import MisrouteRatePanel from './MisrouteRatePanel'
 import {
   getDashboardStats, getRoutingDistribution, getFailureReasons,
   getWarehouseUtilization, getShelfLife, getSplitStats, getDailyTrends,
@@ -107,17 +106,13 @@ export default function DashboardPage() {
   }
 
   const openDetailModal = async (status) => {
-    const title = statusTitles[status] || status
-    setDetailModal({ status, title })
+    setDetailModal({ status, title: statusTitles[status] || status })
     setDetailLoading(true)
     try {
       const result = await getOrdersByStatus({ status, page: 1, limit: 50 })
       setDetailData(result)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setDetailLoading(false)
-    }
+    } catch (err) { console.error(err) }
+    finally { setDetailLoading(false) }
   }
 
   const handleDetailPageChange = async (page) => {
@@ -126,117 +121,146 @@ export default function DashboardPage() {
     try {
       const result = await getOrdersByStatus({ status: detailModal.status, page, limit: 50 })
       setDetailData(result)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setDetailLoading(false)
-    }
+    } catch (err) { console.error(err) }
+    finally { setDetailLoading(false) }
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Dashboard</h2>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">AI Command Center</h2>
+          <p className="text-xs text-gray-400">Intelligent routing analytics and inventory intelligence</p>
+        </div>
       </div>
 
       <FilterBar filters={dashboardFilters} values={filters} onChange={handleFilterChange} />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
+      {/* === SECTION 1: Key Metrics (5 core cards — removed redundant Created/Pending) === */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Total Orders" value={stats.total} color="blue"
+          subtitle="Shopify + Anveshan OTS"
           icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
           onClick={() => openDetailModal('total')} />
-        <StatCard title="Routed" value={stats.routed} color="green"
+        <StatCard title="Successfully Routed" value={stats.routed} color="green"
+          percentage={stats.routedPct} subtitle={`${stats.successRate || 0}% fulfillment rate`}
           icon="M5 13l4 4L19 7"
           onClick={() => openDetailModal('routed')} />
         <StatCard title="Failed" value={stats.failed} color="red"
+          percentage={stats.failedPct} subtitle="No inventory available"
           icon="M6 18L18 6M6 6l12 12"
           onClick={() => openDetailModal('failed')} />
-        <StatCard title="Split Orders" value={stats.split} color="yellow"
+        <StatCard title="Split" value={stats.split} color="yellow"
+          percentage={stats.splitPct} subtitle="Across multiple warehouses"
           icon="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
           onClick={() => openDetailModal('split')} />
-        <StatCard title="Heavy" value={stats.heavy} color="purple"
+        <StatCard title="Heavy (>20kg)" value={stats.heavy} color="purple"
+          percentage={stats.heavyPct} subtitle="Manual handling required"
           icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
           onClick={() => openDetailModal('heavy')} />
-        <StatCard title="Created" value={stats.created} color="blue"
-          icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          onClick={() => openDetailModal('created')} />
-        <StatCard title="Pending" value={stats.pending} color="gray"
-          icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          onClick={() => openDetailModal('pending')} />
       </div>
 
-      {/* Inventory Health Summary Bar */}
-      {stats.inventoryHealth && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-gray-900 text-sm">Good Inventory Overview</h3>
-            <span className="text-xs text-gray-500">Available + Shelf Life ≥ 60%</span>
-          </div>
-          <div className="flex rounded-full h-4 overflow-hidden bg-gray-200">
-            {stats.inventoryHealth.healthyUnits > 0 && (
-              <div className="bg-green-500 transition-all w-full" title={`Good Inventory: ${stats.inventoryHealth.healthyUnits}`} />
-            )}
-          </div>
-          <div className="flex gap-4 mt-2 text-xs text-gray-600">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full" /> Good Inventory: {(stats.inventoryHealth.healthyUnits || 0).toLocaleString()} units ({stats.inventoryHealth.healthySkus || 0} SKUs)</span>
-          </div>
+      {/* Pending/Created mini-badges */}
+      {(stats.pending > 0 || stats.created > 0) && (
+        <div className="flex gap-3 text-xs">
+          {stats.pending > 0 && (
+            <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-200 transition-colors"
+              onClick={() => openDetailModal('pending')}>
+              {stats.pending} orders pending routing
+            </span>
+          )}
+          {stats.created > 0 && (
+            <span className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors"
+              onClick={() => openDetailModal('created')}>
+              {stats.created} orders created (awaiting sync)
+            </span>
+          )}
         </div>
       )}
 
-      {/* Charts Row 1 */}
+      {/* === SECTION 2: AI Intelligence === */}
+      <AIInsightsPanel />
+
+      {/* === SECTION 3: Mis-Route Analysis (NEW — key table) === */}
+      <MisrouteRatePanel />
+
+      {/* === SECTION 4: Alerts === */}
+      <UnfulfillableAlerts />
+
+      {/* === SECTION 5: Warehouse Performance & Failure Analysis (side by side) === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Warehouse Performance Summary */}
+        {utilization?.utilization && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Warehouse Performance</h3>
+              <span className="text-[10px] text-gray-400">{utilization.utilization.length} locations</span>
+            </div>
+            <div className="space-y-3">
+              {utilization.utilization.map((wh, i) => {
+                const loadPct = wh.load_pct || 0
+                const loadColor = loadPct >= 90 ? 'bg-red-500' : loadPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                const loadTextColor = loadPct >= 90 ? 'text-red-700' : loadPct >= 70 ? 'text-amber-700' : 'text-emerald-700'
+                return (
+                  <div key={i} className="bg-gray-50 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-semibold text-gray-800">{wh.name}</span>
+                      <span className={`text-xs font-bold ${loadTextColor}`}>{loadPct}% load</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+                      <div className={`h-1.5 rounded-full ${loadColor} transition-all`} style={{ width: `${loadPct}%` }} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div className="text-center">
+                        <p className="font-bold text-gray-800">{wh.order_count}</p>
+                        <p className="text-gray-500">Orders</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-bold text-gray-800">{(wh.total_units || 0).toLocaleString()}</p>
+                        <p className="text-gray-500">Units Assigned</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-bold text-gray-800">{(wh.available_inventory || 0).toLocaleString()}</p>
+                        <p className="text-gray-500">Available Stock</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Failure Analysis */}
         <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Order Routing Distribution</h3>
-          <RoutingDistributionChart data={distribution} loading={loading} />
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Failure Reasons</h3>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Failure Analysis</h3>
           <FailureReasonsChart data={failures} loading={loading} filters={filters} />
         </div>
       </div>
 
-      {/* Charts Row 2 */}
+      {/* === SECTION 6: AI Scoring + Trends (side by side) === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Warehouse Utilization</h3>
-          <WarehouseUtilizationChart data={utilization} loading={loading} />
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Inventory Shelf Life</h3>
-          <ShelfLifeAnalytics data={shelfLife} loading={loading} />
-        </div>
-      </div>
-
-      {/* Charts Row 3: Scoring & Health */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Warehouse Scoring Breakdown</h3>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">AI Scoring Engine</h3>
           <ScoringBreakdownChart />
         </div>
         <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Inventory Health Engine</h3>
-          <InventoryHealthPanel />
-        </div>
-      </div>
-
-      {/* Charts Row 4 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Order Split Statistics</h3>
-          <OrderSplitStats data={splitStats} loading={loading} />
-        </div>
-        <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4">Daily Processing Trends</h3>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Daily Processing Trends</h3>
           <DailyTrendsChart data={trends} loading={loading} />
         </div>
       </div>
 
-      {/* Order Detail Modal */}
+      {/* === SECTION 7: Inventory Intelligence === */}
+      <div className="card">
+        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Inventory Intelligence</h3>
+        <InventoryHealthPanel />
+      </div>
+
+      {/* === Order Detail Modal === */}
       {detailModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl flex items-center justify-between z-10">
               <div>
                 <h3 className="text-base font-bold text-gray-900">{detailModal.title}</h3>
@@ -249,7 +273,6 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6">
               {detailLoading ? (
                 <div className="animate-pulse space-y-3">
@@ -260,9 +283,6 @@ export default function DashboardPage() {
                 </div>
               ) : detailData.orders?.length === 0 ? (
                 <div className="text-center py-12">
-                  <svg className="w-8 h-8 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
                   <p className="text-gray-400 text-sm">No orders in this category</p>
                 </div>
               ) : (
@@ -306,7 +326,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Pagination */}
                   {detailData.pagination?.pages > 1 && (
                     <div className="mt-4 border-t border-gray-50 pt-3">
                       <Pagination

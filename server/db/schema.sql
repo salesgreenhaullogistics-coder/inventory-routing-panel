@@ -145,3 +145,42 @@ CREATE TABLE IF NOT EXISTS sku_weights (
     sku TEXT PRIMARY KEY,
     weight_kg REAL NOT NULL
 );
+
+-- Routing attempts (full decision trail for each warehouse evaluation)
+CREATE TABLE IF NOT EXISTS routing_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    order_item_id INTEGER NOT NULL,
+    warehouse_id INTEGER NOT NULL,
+    attempt_order INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    rejection_reason TEXT,
+    available_qty INTEGER DEFAULT 0,
+    required_qty INTEGER NOT NULL,
+    allocated_qty INTEGER DEFAULT 0,
+    distance_km REAL,
+    routing_score REAL DEFAULT 0,
+    distance_score REAL DEFAULT 0,
+    inventory_score REAL DEFAULT 0,
+    load_score REAL DEFAULT 0,
+    speed_score REAL DEFAULT 0,
+    cost_score REAL DEFAULT 0,
+    rto_score REAL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_order ON routing_attempts(order_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_item ON routing_attempts(order_item_id);
+
+-- RTO history (return-to-origin probability by pincode)
+CREATE TABLE IF NOT EXISTS rto_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pincode TEXT NOT NULL,
+    zone TEXT,
+    total_orders INTEGER DEFAULT 0,
+    rto_count INTEGER DEFAULT 0,
+    rto_rate REAL DEFAULT 0.05,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rto_pincode ON rto_history(pincode);

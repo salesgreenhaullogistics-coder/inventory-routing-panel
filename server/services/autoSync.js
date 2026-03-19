@@ -169,8 +169,21 @@ async function syncInventory() {
 
 async function runAutoSync() {
   console.log(`[AutoSync] Running at ${new Date().toISOString()}`);
-  await syncOrders();
+  const ordersSynced = await syncOrders();
   await syncInventory();
+
+  // Auto-route pending orders after sync
+  const autoRouteEnabled = process.env.AUTO_ROUTE_ENABLED !== 'false';
+  if (autoRouteEnabled && ordersSynced > 0) {
+    try {
+      const { routeAllPending } = require('./routingEngine');
+      console.log('[AutoSync] Auto-routing pending orders...');
+      const routeResult = await routeAllPending();
+      console.log(`[AutoSync] Auto-route complete: ${JSON.stringify(routeResult)}`);
+    } catch (err) {
+      console.error('[AutoSync] Auto-route failed:', err.message);
+    }
+  }
 }
 
 function startAutoSync() {
